@@ -215,15 +215,387 @@ function setAccent(mode) {
   document.documentElement.style.setProperty('--accent', mode === 'care' ? 'var(--accent-care)' : 'var(--accent-tech)');
 }
 
-/* ===================== CHAT (stubs for next tasks) ===================== */
-function renderChat() {
-  // Overwritten in later tasks
-}
-function sendSystemOpening() {
-  // Overwritten in T3
+/* ===================== GROQ CLIENT ===================== */
+function buildSystemPrompt(mode) {
+  const name = state.settings.names[mode] || (mode === 'tech' ? 'Edson' : 'Ana Paula');
+  return SYSTEM_PROMPTS[mode].replace(/\{\{LEARNER_NAME\}\}/g, name);
 }
 
-/* ===================== REPORT / HISTORY stubs ===================== */
+async function streamResponse(messages, opts = {}) {
+  const { onToken, onDone, onError, maxTokens = 600 } = opts;
+  const key = state.settings.apiKey;
+  if (!key) { onError('Chave da API não configurada'); return; }
+  const abort = new AbortController();
+  state.abortCtrl = abort;
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: state.settings.model,
+        messages,
+        temperature: 0.65,
+        max_tokens: maxTokens,
+        stream: true,
+      }),
+      signal: abort.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(()=>'');
+      let msg = `Erro ${res.status}`;
+      if (res.status === 401) msg = 'Chave da API inválida (401)';
+      else if (res.status === 429) msg = 'Muitas requisições — aguarde um momento (429)';
+      else if (text) msg += ': ' + text.slice(0,200);
+      onError(msg);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim() || !line.startsWith('data:')) continue;
+        const data = line.replace(/^data:\s*/, '');
+        if (data === '[DONE]') continue;
+        try {
+          const obj = JSON.parse(data);
+          const delta = obj.choices?.[0]?.delta?.content || '';
+          if (delta) { full += delta; onToken(delta, full); }
+        } catch (e) { /* ignore malformed */ }
+      }
+    }
+    onDone(full);
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    onError(err.message || 'Erro de rede');
+  } finally {
+    state.abortCtrl = null;
+    state.streaming = false;
+  }
+}
+
+/* ===================== CONVERSATION ENGINE ===================== */
+function isEndSessionTrigger(text) {
+  const t = text.trim().toLowerCase();
+  return /^(stop|chega|acabamos)\b/i.test(t);
+}
+
+function sendSystemOpening() {
+  state.messages = [{ role:'system', content: buildSystemPrompt(state.mode) }];
+  state.streaming = true;
+  appendTutorBubble(''); // placeholder
+  const bubble = lastTutorBubble();
+  let ttsFired = false;
+  streamResponse(state.messages, {
+    onToken: (_delta, full) => {
+      if (bubble) bubble.textContent = full;
+      if (!ttsFired && full.includes('---')) {
+        const parts = full.split('---');
+        if (parts[0].trim().length > 10) {
+          ttsFired = true;
+          speakLine(parts[0]);
+        }
+      }
+      scrollChatToBottom();
+    },
+    onDone: (full) => {
+      const parsed = parseTutorContent(full);
+      if (bubble) renderTutorBubble(bubble, parsed);
+      state.messages.push({ role:'assistant', content: full });
+      if (!ttsFired) speakLine(parsed.character);
+      maybeTrackCleanTurn(full);
+    },
+    onError: (msg) => {
+      toast(msg, 'danger');
+      if (bubble) bubble.textContent = 'Erro ao carregar resposta. Toque em retry.';
+    }
+  });
+}
+
+function sendUserMessage(text) {
+  if (!text.trim() || state.streaming) return;
+  const triggerEnd = isEndSessionTrigger(text) || state.endSessionRequested;
+  appendLearnerBubble(text);
+  state.messages.push({ role:'user', content: text });
+  if (triggerEnd) {
+    state.expectingReport = true;
+    state.messages.push({ role:'user', content: 'Encerrar sessão e gerar o Session Report conforme seu protocolo.' });
+  }
+  state.streaming = true;
+  appendTutorBubble('');
+  const bubble = lastTutorBubble();
+  let ttsFired = false;
+  const maxTokens = state.expectingReport ? 1500 : 600;
+  streamResponse(state.messages, {
+    maxTokens,
+    onToken: (_delta, full) => {
+      if (bubble) bubble.textContent = full;
+      if (!ttsFired && full.includes('---')) {
+        const parts = full.split('---');
+        if (parts[0].trim().length > 10) {
+          ttsFired = true;
+          speakLine(parts[0]);
+        }
+      }
+      scrollChatToBottom();
+    },
+    onDone: (full) => {
+      const parsed = parseTutorContent(full);
+      if (bubble) renderTutorBubble(bubble, parsed);
+      state.messages.push({ role:'assistant', content: full });
+      if (!ttsFired) speakLine(parsed.character);
+      if (state.expectingReport) {
+        handleEndSession(full);
+      } else {
+        maybeTrackCleanTurn(full);
+      }
+    },
+    onError: (msg) => {
+      toast(msg, 'danger');
+      if (bubble) bubble.textContent = 'Erro. Toque para tentar novamente.';
+    }
+  });
+}
+
+function parseTutorContent(raw) {
+  const text = raw || '';
+  const idx = text.indexOf('---');
+  if (idx === -1) return { character: text, feedback: '' };
+  return {
+    character: text.slice(0, idx).trim(),
+    feedback: text.slice(idx + 3).trim(),
+  };
+}
+
+function maybeTrackCleanTurn(full) {
+  const fb = parseTutorContent(full).feedback;
+  if (/Clean\.\s*Next\./i.test(fb) || /Perfect[\s\w]*Next\./i.test(fb)) {
+    state.cleanTurns += 1;
+  }
+}
+
+function handleEndSession(raw) {
+  state.expectingReport = false;
+  state.endSessionRequested = false;
+  const report = parseReport(raw);
+  if (report) {
+    const reports = getReports();
+    reports.push(report);
+    setReports(reports);
+    updateStreak();
+    accumulateVocab(report.new_vocab || []);
+  }
+  state.reportData = report;
+  showScreen('report');
+}
+
+function parseReport(raw) {
+  // Try JSON block first
+  const m = raw.match(/<!--REPORT_JSON\s*([\s\S]*?)-->/);
+  if (m) {
+    try {
+      const data = JSON.parse(m[1].trim());
+      return { ...data, id: data.id || uuid(), date: data.date || new Date().toISOString(), mode: state.mode };
+    } catch (e) {}
+  }
+  // Fallback regex parse from Portuguese headings
+  const cefr = (raw.match(/Nível CEFR[^:]*:\s*(A2|B1|B2|C1)/i) || [])[1] || '';
+  const wins = (raw.match(/🏆[\s\S]*?(?=🔧|📚|🎬|⏱️|$)/) || [''])[0]
+    .split('\n').map(s => s.replace(/^[-\d\s)🏆]*/, '').trim()).filter(Boolean);
+  const next = (raw.match(/🎬\s*Cena sugerida[^:]*:?\s*(.+)/i) || [])[1] || '';
+  const mins = parseInt((raw.match(/⏱️[^\d]*(\d+)/) || [])[1] || '0', 10);
+  return {
+    id: uuid(),
+    date: new Date().toISOString(),
+    mode: state.mode,
+    cefr_estimate: cefr,
+    wins: wins.slice(0, 5),
+    error_patterns: [],
+    new_vocab: [],
+    next_scene: next,
+    active_speaking_minutes: mins,
+  };
+}
+
+function updateStreak() {
+  const s = getStreak();
+  const t = todayStr();
+  if (s.lastSessionDate === t) return; // same day, no increment
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const yStr = yesterday.toISOString().slice(0, 10);
+  if (s.lastSessionDate === yStr || !s.lastSessionDate) {
+    s.count += 1;
+  } else {
+    s.count = 1; // reset after skip
+  }
+  s.lastSessionDate = t;
+  setStreak(s);
+}
+
+function accumulateVocab(items) {
+  if (!items || !items.length) return;
+  const vocab = getVocab();
+  const existing = new Set(vocab.map(v => `${v.word}|${v.mode}`));
+  for (const it of items) {
+    const key = `${it.word}|${state.mode}`;
+    if (!existing.has(key)) {
+      vocab.push({ word: it.word, translation: it.translation, example: it.example, mode: state.mode, date: todayStr() });
+    }
+  }
+  setVocab(vocab);
+}
+
+/* ===================== CHAT UI ===================== */
+function renderChat() {
+  const streak = getStreak();
+  screens.chat.innerHTML = `
+    <div class="chat-header">
+      <div class="title">
+        <h2>${state.mode === 'care' ? '🏥 Care' : '💻 Tech'}</h2>
+        <span class="streak">🔥 ${streak.count}</span>
+      </div>
+      <button id="end-session" class="btn btn-danger" style="padding:8px 10px; font-size:0.85rem;">Encerrar</button>
+    </div>
+    <div id="chat-messages" class="chat-messages"></div>
+    <div id="interim" class="interim"></div>
+    <div class="composer">
+      <div class="composer-row">
+        <input id="chat-input" placeholder="Digite em inglês..." autocomplete="off" />
+        ${hasSTT() ? `<button id="mic-btn" class="mic-btn">🎙️</button>` : ''}
+        <button id="send-btn" class="send-btn">➤</button>
+      </div>
+      ${!hasSTT() ? '<div class="text-muted text-center" style="font-size:0.8rem;">Ditado por voz não disponível neste navegador — use o teclado.</div>' : ''}
+    </div>
+  `;
+  const input = document.getElementById('chat-input');
+  const send = () => { sendUserMessage(input.value); input.value = ''; };
+  document.getElementById('send-btn').onclick = send;
+  input.onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  document.getElementById('end-session').onclick = () => {
+    state.endSessionRequested = true;
+    sendUserMessage('stop');
+  };
+  if (hasSTT()) initMic();
+  // Re-render existing messages
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = '';
+  for (const msg of state.messages) {
+    if (msg.role === 'user') appendLearnerBubble(msg.content);
+    else if (msg.role === 'assistant') {
+      const parsed = parseTutorContent(msg.content);
+      const b = appendTutorBubble('');
+      renderTutorBubble(b, parsed);
+    }
+  }
+  scrollChatToBottom();
+}
+
+function appendLearnerBubble(text) {
+  const c = document.getElementById('chat-messages');
+  if (!c) return;
+  const el = document.createElement('div');
+  el.className = 'msg msg-learner';
+  el.textContent = text;
+  c.appendChild(el);
+  scrollChatToBottom();
+  return el;
+}
+function appendTutorBubble(text) {
+  const c = document.getElementById('chat-messages');
+  if (!c) return;
+  const wrap = document.createElement('div');
+  wrap.style.alignSelf = 'flex-start';
+  wrap.style.maxWidth = '88%';
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+  const el = document.createElement('div');
+  el.className = 'msg msg-tutor';
+  el.textContent = text;
+  wrap.appendChild(el);
+  c.appendChild(wrap);
+  scrollChatToBottom();
+  return el;
+}
+function lastTutorBubble() {
+  const c = document.getElementById('chat-messages');
+  if (!c) return null;
+  const all = c.querySelectorAll('.msg-tutor');
+  return all[all.length - 1] || null;
+}
+function renderTutorBubble(bubble, { character, feedback }) {
+  if (!bubble) return;
+  const parent = bubble.parentElement;
+  bubble.textContent = '';
+  // Character line
+  const charDiv = document.createElement('div');
+  charDiv.textContent = character;
+  bubble.appendChild(charDiv);
+  // Replay button
+  const replay = document.createElement('button');
+  replay.className = 'replay-btn';
+  replay.textContent = '🔊 Replay';
+  replay.onclick = () => speakLine(character);
+  bubble.appendChild(replay);
+  // Feedback card
+  if (feedback) {
+    const card = document.createElement('div');
+    card.className = 'feedback-card collapsed';
+    const header = document.createElement('div');
+    header.className = 'feedback-header';
+    header.innerHTML = '<span>📝 Feedback</span><span>▼</span>';
+    header.onclick = () => {
+      const body = card.querySelector('.feedback-body');
+      const arrow = header.querySelector('span:last-child');
+      const isHidden = !body || body.style.display === 'none';
+      if (!body) return;
+      body.style.display = isHidden ? 'flex' : 'none';
+      arrow.textContent = isHidden ? '▲' : '▼';
+    };
+    const body = document.createElement('div');
+    body.className = 'feedback-body';
+    body.style.display = 'none';
+    // Parse feedback lines into colored spans
+    feedback.split('\n').forEach(line => {
+      const div = document.createElement('div');
+      const l = line.trim();
+      if (!l) return;
+      if (l.startsWith('✅')) div.style.color = 'var(--ok)';
+      else if (l.startsWith('🔧')) div.className = 'fb-fix';
+      else if (l.startsWith('💡')) div.className = 'fb-tip';
+      div.textContent = l;
+      body.appendChild(div);
+    });
+    card.appendChild(header);
+    card.appendChild(body);
+    parent.appendChild(card);
+  }
+}
+function scrollChatToBottom() {
+  const c = document.getElementById('chat-messages');
+  if (c) c.scrollTop = c.scrollHeight;
+}
+
+/* ===================== VOICE (stubs for T5) ===================== */
+function hasSTT() {
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+function initMic() {
+  // Overwritten in T5
+}
+function speakLine(text) {
+  // Overwritten in T5
+}
+
+/* ===================== REPORT / HISTORY (stubs for T6/T7) ===================== */
 function renderReport() {}
 function renderHistory() {}
 
