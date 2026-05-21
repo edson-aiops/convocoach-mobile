@@ -14,3 +14,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | T8 Gamification | ✅ Done | `92c007b` |
 | T9 Acceptance pass | ✅ Done | `7ff2274` |
 | T10 README + docs | ✅ Done | — |
+| Post-audit fixes | ✅ Done | — |

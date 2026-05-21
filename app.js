@@ -308,6 +308,7 @@ function sendSystemOpening() {
       scrollChatToBottom();
     },
     onDone: (full) => {
+      full = full.replace(/^[\s\S]*?<\/think>/i, '').trimStart();
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
@@ -338,11 +339,13 @@ function sendUserMessage(text) {
   appendTutorBubble('');
   const bubble = lastTutorBubble();
   let ttsFired = false;
-  const maxTokens = state.expectingReport ? 1500 : 600;
+  const maxTokens = state.expectingReport ? 2000 : 600;
   streamResponse(state.messages, {
     maxTokens,
     onToken: (_delta, full) => {
-      if (bubble) bubble.textContent = full;
+      if (bubble) bubble.textContent = state.expectingReport
+        ? full.replace(/<!--REPORT_JSON[\s\S]*$/, '')
+        : full;
       if (!ttsFired && full.includes('---')) {
         const parts = full.split('---');
         if (parts[0].trim().length > 10) {
@@ -353,6 +356,7 @@ function sendUserMessage(text) {
       scrollChatToBottom();
     },
     onDone: (full) => {
+      full = full.replace(/^[\s\S]*?<\/think>/i, '').trimStart();
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
@@ -374,7 +378,7 @@ function sendUserMessage(text) {
           bubble.textContent = '';
           state.streaming = true;
           let ttsFired = false;
-          const maxTokens = state.expectingReport ? 1500 : 600;
+          const maxTokens = state.expectingReport ? 2000 : 600;
           streamResponse(state.messages, {
             maxTokens,
             onToken: (_delta, full) => {
@@ -386,6 +390,7 @@ function sendUserMessage(text) {
               scrollChatToBottom();
             },
             onDone: (full) => {
+              full = full.replace(/^[\s\S]*?<\/think>/i, '').trimStart();
               const parsed = parseTutorContent(full);
               if (bubble) renderTutorBubble(bubble, parsed);
               state.messages.push({ role:'assistant', content: full });
