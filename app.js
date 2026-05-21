@@ -356,8 +356,9 @@ function sendUserMessage(text) {
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
-      if (!ttsFired) speakLine(parsed.character);
+      if (!ttsFired && !state.expectingReport) speakLine(parsed.character);
       if (state.expectingReport) {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
         handleEndSession(full);
       } else {
         maybeTrackCleanTurn(full);
@@ -388,9 +389,13 @@ function sendUserMessage(text) {
               const parsed = parseTutorContent(full);
               if (bubble) renderTutorBubble(bubble, parsed);
               state.messages.push({ role:'assistant', content: full });
-              if (!ttsFired) speakLine(parsed.character);
-              if (state.expectingReport) handleEndSession(full);
-              else maybeTrackCleanTurn(full);
+              if (!ttsFired && !state.expectingReport) speakLine(parsed.character);
+              if (state.expectingReport) {
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+                handleEndSession(full);
+              } else {
+                maybeTrackCleanTurn(full);
+              }
             },
             onError: (m2) => {
               toast(m2, 'danger');
@@ -421,6 +426,7 @@ function maybeTrackCleanTurn(full) {
 }
 
 function handleEndSession(raw) {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
   state.expectingReport = false;
   state.endSessionRequested = false;
   const report = parseReport(raw);
@@ -738,14 +744,17 @@ function initMic() {
     if (rec) { try { rec.stop(); } catch(e){} }
   }
 
-  // Push-to-talk: hold on pointerdown, release on pointerup/leave
-  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); startRec(); });
-  btn.addEventListener('pointerup', () => stopRec());
-  btn.addEventListener('pointerleave', () => stopRec());
-  // Tap-to-toggle fallback for iOS
-  btn.addEventListener('click', (e) => {
-    if (!state.recording) { e.stopPropagation(); startRec(); }
-    else { e.stopPropagation(); stopRec(); }
+  let suppressClick = false;
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') { e.preventDefault(); startRec(); }
+  });
+  btn.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse') { stopRec(); suppressClick = true; setTimeout(() => suppressClick = false, 300); }
+  });
+  btn.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') stopRec(); });
+  btn.addEventListener('click', () => {
+    if (suppressClick) return;
+    state.recording ? stopRec() : startRec();
   });
 }
 
