@@ -316,7 +316,11 @@ function sendSystemOpening() {
     },
     onError: (msg) => {
       toast(msg, 'danger');
-      if (bubble) bubble.textContent = 'Erro ao carregar resposta. Toque em retry.';
+      if (bubble) {
+        bubble.textContent = 'Erro ao carregar resposta. Toque para tentar novamente.';
+        bubble.style.cursor = 'pointer';
+        bubble.onclick = () => { bubble.style.cursor = ''; bubble.onclick = null; sendSystemOpening(); };
+      }
     }
   });
 }
@@ -361,7 +365,40 @@ function sendUserMessage(text) {
     },
     onError: (msg) => {
       toast(msg, 'danger');
-      if (bubble) bubble.textContent = 'Erro. Toque para tentar novamente.';
+      if (bubble) {
+        bubble.textContent = 'Erro. Toque para tentar novamente.';
+        bubble.style.cursor = 'pointer';
+        bubble.onclick = () => {
+          bubble.style.cursor = ''; bubble.onclick = null;
+          bubble.textContent = '';
+          state.streaming = true;
+          let ttsFired = false;
+          const maxTokens = state.expectingReport ? 1500 : 600;
+          streamResponse(state.messages, {
+            maxTokens,
+            onToken: (_delta, full) => {
+              if (bubble) bubble.textContent = full;
+              if (!ttsFired && full.includes('---')) {
+                const parts = full.split('---');
+                if (parts[0].trim().length > 10) { ttsFired = true; speakLine(parts[0]); }
+              }
+              scrollChatToBottom();
+            },
+            onDone: (full) => {
+              const parsed = parseTutorContent(full);
+              if (bubble) renderTutorBubble(bubble, parsed);
+              state.messages.push({ role:'assistant', content: full });
+              if (!ttsFired) speakLine(parsed.character);
+              if (state.expectingReport) handleEndSession(full);
+              else maybeTrackCleanTurn(full);
+            },
+            onError: (m2) => {
+              toast(m2, 'danger');
+              if (bubble) bubble.textContent = 'Erro. Toque para tentar novamente.';
+            }
+          });
+        };
+      }
     }
   });
 }
@@ -476,6 +513,7 @@ function renderChat() {
         <button id="end-session" class="btn btn-danger" style="padding:8px 10px; font-size:0.85rem;">Encerrar</button>
       </div>
     </div>
+    ${!navigator.onLine ? '<div class="text-center" style="padding:6px; background:rgba(255,92,92,0.15); color:var(--danger); font-size:0.8rem; border-radius:8px; margin-bottom:6px;">⚠️ Sem internet — o chat precisa de conexão</div>' : ''}
     <div id="chat-messages" class="chat-messages"></div>
     <div id="interim" class="interim"></div>
     <div class="composer">
@@ -488,7 +526,7 @@ function renderChat() {
     </div>
   `;
   const input = document.getElementById('chat-input');
-  const send = () => { sendUserMessage(input.value); input.value = ''; };
+  const send = () => { primeTTS(); sendUserMessage(input.value); input.value = ''; };
   document.getElementById('send-btn').onclick = send;
   input.onkeydown = (e) => { if (e.key === 'Enter') send(); };
   document.getElementById('end-session').onclick = () => {
@@ -876,6 +914,16 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('scroll', handleVisualViewport);
 }
 
+/* ===================== NETWORK ===================== */
+function updateOnlineStatus() {
+  if (!navigator.onLine) {
+    toast('Sem conexão. O app funciona offline, mas o chat precisa de internet.', 'danger');
+  }
+}
+window.addEventListener('online', () => toast('Conexão restaurada'));
+window.addEventListener('offline', () => toast('Sem conexão', 'danger'));
+
 /* ===================== INIT ===================== */
 const hasKey = !!state.settings.apiKey;
 showScreen(hasKey ? 'home' : 'setup');
+updateOnlineStatus();
