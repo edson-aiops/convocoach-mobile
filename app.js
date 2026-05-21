@@ -787,12 +787,19 @@ function downloadFile(filename, content, mime) {
 
 /* ===================== HISTORY ===================== */
 function renderHistory() {
-  const reports = getReports();
+  const all = getReports();
+  const filter = state.historyFilter || 'all';
+  const reports = filter === 'all' ? all : all.filter(r => r.mode === filter);
   screens.history.innerHTML = `
     <div class="chat-header">
       <h2>📜 Histórico</h2>
       <button id="hist-close" class="btn btn-secondary" style="padding:8px 10px;">✕</button>
     </div>
+    <select id="hist-filter" style="margin-bottom:4px;">
+      <option value="all" ${filter==='all'?'selected':''}>Todos</option>
+      <option value="tech" ${filter==='tech'?'selected':''}>Tech</option>
+      <option value="care" ${filter==='care'?'selected':''}>Care</option>
+    </select>
     <div class="history-list">
       ${reports.length === 0 ? '<p class="text-muted text-center">Nenhum relatório ainda.</p>' : ''}
       ${reports.slice().reverse().map(r => `
@@ -808,9 +815,11 @@ function renderHistory() {
     <button id="clear-hist" class="btn btn-danger">Limpar histórico</button>
   `;
   document.getElementById('hist-close').onclick = () => showScreen('home');
+  const filterSel = document.getElementById('hist-filter');
+  if (filterSel) filterSel.onchange = (e) => { state.historyFilter = e.target.value; renderHistory(); };
   screens.history.querySelectorAll('.history-item').forEach(item => {
     item.onclick = () => {
-      const r = reports.find(x => x.id === item.dataset.id);
+      const r = all.find(x => x.id === item.dataset.id);
       if (r) { state.reportData = r; state.reportRaw = ''; showScreen('report'); }
     };
   });
