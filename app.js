@@ -346,7 +346,7 @@ function sendUserMessage(text) {
       if (bubble) bubble.textContent = state.expectingReport
         ? full.replace(/<!--REPORT_JSON[\s\S]*$/, '')
         : full;
-      if (!ttsFired && full.includes('---')) {
+      if (!ttsFired && !state.expectingReport && full.includes('---')) {
         const parts = full.split('---');
         if (parts[0].trim().length > 10) {
           ttsFired = true;
@@ -383,7 +383,7 @@ function sendUserMessage(text) {
             maxTokens,
             onToken: (_delta, full) => {
               if (bubble) bubble.textContent = full;
-              if (!ttsFired && full.includes('---')) {
+              if (!ttsFired && !state.expectingReport && full.includes('---')) {
                 const parts = full.split('---');
                 if (parts[0].trim().length > 10) { ttsFired = true; speakLine(parts[0]); }
               }
