@@ -584,15 +584,119 @@ function scrollChatToBottom() {
   if (c) c.scrollTop = c.scrollHeight;
 }
 
-/* ===================== VOICE (stubs for T5) ===================== */
+/* ===================== VOICE ===================== */
+let ttsPrimed = false;
+function primeTTS() {
+  if (ttsPrimed || !window.speechSynthesis) return;
+  ttsPrimed = true;
+  const u = new SpeechSynthesisUtterance(' ');
+  u.volume = 0;
+  window.speechSynthesis.speak(u);
+}
+
+function speakLine(text) {
+  if (!state.settings.tts || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const clean = String(text)
+    .replace(/^🎭\s*/, '')
+    .replace(/[*_`#]/g, '')
+    .trim();
+  if (!clean) return;
+  const utter = new SpeechSynthesisUtterance(clean);
+  const voices = window.speechSynthesis.getVoices() || [];
+  const chosen = voices.find(v => v.voiceURI === state.settings.voiceURI)
+    || voices.find(v => /en-ca/i.test(v.lang))
+    || voices.find(v => /en-us/i.test(v.lang))
+    || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en'))
+    || null;
+  if (chosen) {
+    utter.voice = chosen;
+    utter.lang = chosen.lang;
+  } else {
+    utter.lang = 'en-CA';
+  }
+  utter.rate = state.settings.rate || 1.0;
+  window.speechSynthesis.speak(utter);
+}
+
 function hasSTT() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
+
 function initMic() {
-  // Overwritten in T5
-}
-function speakLine(text) {
-  // Overwritten in T5
+  const btn = document.getElementById('mic-btn');
+  const input = document.getElementById('chat-input');
+  const interim = document.getElementById('interim');
+  if (!btn || !input) return;
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) return;
+
+  let rec = null;
+  let finalTranscript = '';
+
+  function startRec() {
+    primeTTS();
+    if (rec) { try { rec.stop(); } catch(e){} }
+    finalTranscript = '';
+    rec = new SpeechRec();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => {
+      state.recording = true;
+      btn.classList.add('recording');
+      if (interim) interim.textContent = 'Ouvindo…';
+    };
+    rec.onresult = (e) => {
+      let interimText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalTranscript += t;
+        else interimText += t;
+      }
+      if (interim) interim.textContent = interimText;
+    };
+    rec.onerror = (e) => {
+      state.recording = false;
+      btn.classList.remove('recording');
+      if (interim) interim.textContent = '';
+      const map = {
+        'no-speech': 'Nenhuma fala detectada.',
+        'audio-capture': 'Microfone não disponível.',
+        'not-allowed': 'Permissão do microfone negada.',
+      };
+      toast(map[e.error] || `Erro de reconhecimento: ${e.error}`, 'danger');
+    };
+    rec.onend = () => {
+      state.recording = false;
+      btn.classList.remove('recording');
+      if (interim) interim.textContent = '';
+      if (finalTranscript.trim()) {
+        if (state.settings.autoSendSTT) {
+          sendUserMessage(finalTranscript.trim());
+        } else {
+          input.value = finalTranscript.trim();
+          input.focus();
+        }
+      }
+      rec = null;
+    };
+    try { rec.start(); } catch(e) { toast('Não foi possível iniciar o microfone','danger'); }
+  }
+  function stopRec() {
+    if (rec) { try { rec.stop(); } catch(e){} }
+  }
+
+  // Push-to-talk: hold on pointerdown, release on pointerup/leave
+  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); startRec(); });
+  btn.addEventListener('pointerup', () => stopRec());
+  btn.addEventListener('pointerleave', () => stopRec());
+  // Tap-to-toggle fallback for iOS
+  btn.addEventListener('click', (e) => {
+    if (!state.recording) { e.stopPropagation(); startRec(); }
+    else { e.stopPropagation(); stopRec(); }
+  });
 }
 
 /* ===================== REPORT / HISTORY (stubs for T6/T7) ===================== */
