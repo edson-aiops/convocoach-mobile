@@ -395,6 +395,7 @@ function handleEndSession(raw) {
     accumulateVocab(report.new_vocab || []);
   }
   state.reportData = report;
+  state.reportRaw = raw;
   showScreen('report');
 }
 
@@ -699,9 +700,127 @@ function initMic() {
   });
 }
 
-/* ===================== REPORT / HISTORY (stubs for T6/T7) ===================== */
-function renderReport() {}
-function renderHistory() {}
+/* ===================== REPORT ===================== */
+function renderReport() {
+  const r = state.reportData || {};
+  const raw = state.reportRaw || '';
+  // Extract human-readable portion above JSON block
+  let human = raw.replace(/<!--REPORT_JSON[\s\S]*?-->/, '').trim();
+  if (!human) {
+    // Reconstruct from JSON
+    human = `# Relatório de Sessão — ${r.mode === 'care' ? 'Care' : 'Tech'}\n\n` +
+      `**Nível CEFR estimado:** ${r.cefr_estimate || '—'}\n\n` +
+      `🏆 **Destaques**\n${(r.wins || []).map(w => `- ${w}`).join('\n') || '—'}\n\n` +
+      `🔧 **Padrões de erro**\n${(r.error_patterns || []).map(e => `- ${e.pattern}${e.safety_critical ? ' ⚠️' : ''}`).join('\n') || '—'}\n\n` +
+      `📚 **Vocabulário novo**\n${(r.new_vocab || []).map(v => `- **${v.word}**: ${v.translation} — "${v.example}"`).join('\n') || '—'}\n\n` +
+      `🎬 **Próxima cena:** ${r.next_scene || '—'}\n\n` +
+      `⏱️ **Tempo de fala ativa:** ${r.active_speaking_minutes || 0} min`;
+  }
+  screens.report.innerHTML = `
+    <div class="chat-header">
+      <h2>📊 Relatório</h2>
+      <button id="report-close" class="btn btn-secondary" style="padding:8px 10px;">✕</button>
+    </div>
+    <div class="report-scroll">
+      <div class="report-section">
+        <h3>🎯 Nível CEFR</h3>
+        <p>${escapeHtml(r.cefr_estimate || '—')}</p>
+      </div>
+      <div class="report-section">
+        <h3>🏆 Destaques</h3>
+        ${(r.wins || []).map(w => `<p>• ${escapeHtml(w)}</p>`).join('') || '<p class="text-muted">—</p>'}
+      </div>
+      <div class="report-section">
+        <h3>🔧 Padrões de erro</h3>
+        ${(r.error_patterns || []).map(e => `<p class="${e.safety_critical ? 'danger' : ''}">• ${escapeHtml(e.pattern)} ${e.safety_critical ? '⚠️' : ''}</p>`).join('') || '<p class="text-muted">—</p>'}
+      </div>
+      <div class="report-section">
+        <h3>📚 Vocabulário novo</h3>
+        ${(r.new_vocab || []).map(v => `<p><strong>${escapeHtml(v.word)}</strong> — ${escapeHtml(v.translation)}<br/><em>"${escapeHtml(v.example)}"</em></p>`).join('') || '<p class="text-muted">—</p>'}
+      </div>
+      <div class="report-section">
+        <h3>🎬 Próxima cena</h3>
+        <p>${escapeHtml(r.next_scene || '—')}</p>
+      </div>
+      <div class="report-section">
+        <h3>⏱️ Tempo de fala ativa</h3>
+        <p>${r.active_speaking_minutes || 0} min</p>
+      </div>
+      <div class="row row-wrap">
+        <button id="copy-report" class="btn btn-secondary grow">Copiar</button>
+        <button id="dl-md" class="btn btn-secondary grow">Baixar .md</button>
+        <button id="dl-vocab" class="btn btn-secondary grow">Exportar vocabulário (JSON)</button>
+      </div>
+      <button id="new-session" class="btn btn-primary">Nova sessão</button>
+    </div>
+  `;
+  document.getElementById('report-close').onclick = () => showScreen('home');
+  document.getElementById('copy-report').onclick = () => {
+    navigator.clipboard.writeText(human).then(() => toast('Copiado!')).catch(() => toast('Erro ao copiar','danger'));
+  };
+  document.getElementById('dl-md').onclick = () => downloadFile('relatorio.md', human, 'text/markdown');
+  document.getElementById('dl-vocab').onclick = () => {
+    const vocab = getVocab().filter(v => v.mode === state.mode);
+    downloadFile('vocabulario.json', JSON.stringify(vocab, null, 2), 'application/json');
+  };
+  document.getElementById('new-session').onclick = () => {
+    state.messages = [];
+    state.cleanTurns = 0;
+    state.sessionStart = Date.now();
+    state.reportData = null;
+    state.reportRaw = '';
+    showScreen('chat');
+    sendSystemOpening();
+  };
+}
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+/* ===================== HISTORY ===================== */
+function renderHistory() {
+  const reports = getReports();
+  screens.history.innerHTML = `
+    <div class="chat-header">
+      <h2>📜 Histórico</h2>
+      <button id="hist-close" class="btn btn-secondary" style="padding:8px 10px;">✕</button>
+    </div>
+    <div class="history-list">
+      ${reports.length === 0 ? '<p class="text-muted text-center">Nenhum relatório ainda.</p>' : ''}
+      ${reports.slice().reverse().map(r => `
+        <div class="history-item" data-id="${escapeHtml(r.id)}">
+          <div>
+            <div><strong>${new Date(r.date).toLocaleDateString('pt-BR')}</strong> · ${r.mode === 'care' ? '🏥 Care' : '💻 Tech'}</div>
+            <div class="text-muted">CEFR: ${escapeHtml(r.cefr_estimate || '—')}</div>
+          </div>
+          <span class="badge">${escapeHtml(r.cefr_estimate || '—')}</span>
+        </div>
+      `).join('')}
+    </div>
+    <button id="clear-hist" class="btn btn-danger">Limpar histórico</button>
+  `;
+  document.getElementById('hist-close').onclick = () => showScreen('home');
+  screens.history.querySelectorAll('.history-item').forEach(item => {
+    item.onclick = () => {
+      const r = reports.find(x => x.id === item.dataset.id);
+      if (r) { state.reportData = r; state.reportRaw = ''; showScreen('report'); }
+    };
+  });
+  document.getElementById('clear-hist').onclick = () => {
+    if (!confirm('Apagar todo o histórico?')) return;
+    setReports([]);
+    renderHistory();
+    toast('Histórico limpo');
+  };
+}
 
 /* ===================== UTILS ===================== */
 function escapeHtml(str) {
