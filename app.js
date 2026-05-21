@@ -613,6 +613,26 @@ function todayStr() {
   return new Date().toISOString().slice(0,10);
 }
 
+/* ===================== KEYBOARD AWARENESS ===================== */
+function handleVisualViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const app = document.getElementById('app');
+  const offset = window.innerHeight - vv.height - vv.offsetTop;
+  if (offset > 80) {
+    // keyboard likely open
+    app.style.height = `${vv.height}px`;
+    app.style.overflow = 'hidden';
+  } else {
+    app.style.height = '';
+    app.style.overflow = '';
+  }
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', handleVisualViewport);
+  window.visualViewport.addEventListener('scroll', handleVisualViewport);
+}
+
 /* ===================== INIT ===================== */
 const hasKey = !!state.settings.apiKey;
 showScreen(hasKey ? 'home' : 'setup');
