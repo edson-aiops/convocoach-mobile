@@ -405,7 +405,12 @@ function parseReport(raw) {
   if (m) {
     try {
       const data = JSON.parse(m[1].trim());
-      return { ...data, id: data.id || uuid(), date: data.date || new Date().toISOString(), mode: state.mode };
+      const report = { ...data, id: data.id || uuid(), date: data.date || new Date().toISOString(), mode: state.mode };
+      if (state.cleanTurns > 0) {
+        report.wins = report.wins || [];
+        report.wins.unshift(`${state.cleanTurns} turn(s) limpo(s) nesta sessão`);
+      }
+      return report;
     } catch (e) {}
   }
   // Fallback regex parse from Portuguese headings
@@ -414,7 +419,7 @@ function parseReport(raw) {
     .split('\n').map(s => s.replace(/^[-\d\s)🏆]*/, '').trim()).filter(Boolean);
   const next = (raw.match(/🎬\s*Cena sugerida[^:]*:?\s*(.+)/i) || [])[1] || '';
   const mins = parseInt((raw.match(/⏱️[^\d]*(\d+)/) || [])[1] || '0', 10);
-  return {
+  const report = {
     id: uuid(),
     date: new Date().toISOString(),
     mode: state.mode,
@@ -425,6 +430,8 @@ function parseReport(raw) {
     next_scene: next,
     active_speaking_minutes: mins,
   };
+  if (state.cleanTurns > 0) report.wins.unshift(`${state.cleanTurns} turn(s) limpo(s) nesta sessão`);
+  return report;
 }
 
 function updateStreak() {
@@ -464,7 +471,10 @@ function renderChat() {
         <h2>${state.mode === 'care' ? '🏥 Care' : '💻 Tech'}</h2>
         <span class="streak">🔥 ${streak.count}</span>
       </div>
-      <button id="end-session" class="btn btn-danger" style="padding:8px 10px; font-size:0.85rem;">Encerrar</button>
+      <div class="row" style="gap:10px;align-items:center;">
+        <span class="text-muted" style="font-size:0.8rem;">✨ ${state.cleanTurns} clean</span>
+        <button id="end-session" class="btn btn-danger" style="padding:8px 10px; font-size:0.85rem;">Encerrar</button>
+      </div>
     </div>
     <div id="chat-messages" class="chat-messages"></div>
     <div id="interim" class="interim"></div>
@@ -548,8 +558,9 @@ function renderTutorBubble(bubble, { character, feedback }) {
   bubble.appendChild(replay);
   // Feedback card
   if (feedback) {
+    const hasSafety = /⚠️|safety|critical|constipated|intoxicated|injury|dose|wrong word/i.test(feedback);
     const card = document.createElement('div');
-    card.className = 'feedback-card collapsed';
+    card.className = 'feedback-card collapsed' + (hasSafety ? ' safety' : '');
     const header = document.createElement('div');
     header.className = 'feedback-header';
     header.innerHTML = '<span>📝 Feedback</span><span>▼</span>';

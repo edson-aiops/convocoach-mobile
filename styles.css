@@ -240,6 +240,7 @@ label {
   font-size: 0.85rem;
 }
 .feedback-card.collapsed { display: none; }
+.feedback-card.safety { border-left-color: var(--danger); background: rgba(255,92,92,0.08); }
 .feedback-header {
   display: flex;
   justify-content: space-between;
