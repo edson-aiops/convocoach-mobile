@@ -18,3 +18,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Translate button (EN→PT) | ✅ Done | — |
 | Mic auto-stop after 4s silence | ✅ Done | — |
 | Lock model to Llama 3.3, drop Qwen3 | ✅ Done | — |
+| Add Daily Life mode with 4 scenarios | ✅ Done | — |

@@ -1,9 +1,9 @@
-import { SYSTEM_PROMPTS } from './prompts.js';
+import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
 /* ===================== STATE ===================== */
 const state = {
   screen: 'setup',
-  mode: null, // 'tech' | 'care'
+  mode: null, // 'tech' | 'care' | 'daily'
   messages: [],
   settings: loadSettings(),
   streaming: false,
@@ -71,6 +71,7 @@ const screens = {
   chat: document.getElementById('chat-screen'),
   report: document.getElementById('report-screen'),
   history: document.getElementById('history-screen'),
+  daily: document.getElementById('daily-screen'),
 };
 const toastContainer = document.getElementById('toast-container');
 
@@ -84,6 +85,7 @@ function showScreen(name) {
   if (name === 'chat') renderChat();
   if (name === 'report') renderReport();
   if (name === 'history') renderHistory();
+  if (name === 'daily') renderDailyPicker();
 }
 
 /* ===================== TOAST ===================== */
@@ -166,6 +168,7 @@ function renderHome() {
   const reports = getReports();
   const lastTech = reports.filter(r => r.mode === 'tech').pop();
   const lastCare = reports.filter(r => r.mode === 'care').pop();
+  const lastDaily = reports.filter(r => r.mode === 'daily').pop();
   screens.home.innerHTML = `
     <div class="home-header">
       <h1>ConvoCoach</h1>
@@ -182,13 +185,21 @@ function renderHome() {
         <p>Inglês de cuidado ao paciente com precisão clínica.</p>
         <div class="stat">🔥 ${streak.count} dias · ${lastCare ? 'CEFR: ' + lastCare.cefr_estimate : 'Iniciar'}</div>
       </div>
+      <div class="mode-card daily" data-mode="daily">
+        <h2>🌟 Dia a Dia</h2>
+        <p>Restaurante, viagem, compras e conversa livre.</p>
+        <div class="stat">🔥 ${streak.count} dias · ${lastDaily ? 'CEFR: ' + lastDaily.cefr_estimate : 'Iniciar'}</div>
+      </div>
     </div>
     <button id="home-history" class="btn btn-secondary">📜 Histórico</button>
   `;
   document.getElementById('home-gear').onclick = () => showScreen('setup');
   document.getElementById('home-history').onclick = () => showScreen('history');
   screens.home.querySelectorAll('.mode-card').forEach(card => {
-    card.onclick = () => startMode(card.dataset.mode);
+    card.onclick = () => {
+      if (card.dataset.mode === 'daily') showScreen('daily');
+      else startMode(card.dataset.mode);
+    };
   });
 }
 
@@ -205,12 +216,79 @@ function startMode(mode) {
   sendSystemOpening();
 }
 
+function renderDailyPicker() {
+  let selectedPerson = state.dailyName || 'Edson';
+  const updatePersonButtons = () => {
+    const edsonBtn = document.getElementById('person-edson');
+    const anaBtn = document.getElementById('person-ana');
+    if (edsonBtn) edsonBtn.classList.toggle('active', selectedPerson === 'Edson');
+    if (anaBtn) anaBtn.classList.toggle('active', selectedPerson === 'Ana Paula');
+  };
+  screens.daily.innerHTML = `
+    <div class="daily-scroll">
+      <div class="daily-section">
+        <h2>🌟 Dia a Dia</h2>
+        <p>Escolha quem está praticando e o cenário.</p>
+      </div>
+      <div class="daily-section">
+        <label>Quem está praticando?</label>
+        <div class="person-toggle">
+          <button id="person-edson" class="btn btn-secondary">Edson</button>
+          <button id="person-ana" class="btn btn-secondary">Ana Paula</button>
+        </div>
+      </div>
+      <div class="daily-section">
+        <label>Cenário</label>
+        <div class="scenario-grid">
+          ${Object.entries(DAILY_SCENARIOS).map(([key, s]) => `
+            <button class="mode-card daily" data-scenario="${key}">
+              <h2>${s.label}</h2>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <button id="daily-back" class="btn btn-secondary">Voltar</button>
+    </div>
+  `;
+  updatePersonButtons();
+  document.getElementById('person-edson').onclick = () => { selectedPerson = 'Edson'; updatePersonButtons(); };
+  document.getElementById('person-ana').onclick = () => { selectedPerson = 'Ana Paula'; updatePersonButtons(); };
+  screens.daily.querySelectorAll('.scenario-grid .mode-card').forEach(card => {
+    card.onclick = () => startDaily(card.dataset.scenario, selectedPerson);
+  });
+  document.getElementById('daily-back').onclick = () => showScreen('home');
+}
+
+function startDaily(scenarioKey, personName) {
+  state.mode = 'daily';
+  state.dailyScenario = scenarioKey;
+  state.dailyName = personName;
+  state.messages = [];
+  state.cleanTurns = 0;
+  state.expectingReport = false;
+  state.endSessionRequested = false;
+  state.sessionStart = Date.now();
+  setAccent('daily');
+  showScreen('chat');
+  primeTTS();
+  sendSystemOpening();
+}
+
 function setAccent(mode) {
-  document.documentElement.style.setProperty('--accent', mode === 'care' ? 'var(--accent-care)' : 'var(--accent-tech)');
+  const accent = mode === 'care' ? 'var(--accent-care)' : mode === 'daily' ? 'var(--accent-daily)' : 'var(--accent-tech)';
+  document.documentElement.style.setProperty('--accent', accent);
 }
 
 /* ===================== GROQ CLIENT ===================== */
 function buildSystemPrompt(mode) {
+  if (mode === 'daily') {
+    const name = state.dailyName || 'Edson';
+    const scenario = DAILY_SCENARIOS[state.dailyScenario] || DAILY_SCENARIOS.free;
+    const scenarioContext = scenario.context.replace(/\{\{LEARNER_NAME\}\}/g, name);
+    return SYSTEM_PROMPTS.daily
+      .replace(/\{\{SCENARIO\}\}/g, scenarioContext)
+      .replace(/\{\{LEARNER_NAME\}\}/g, name);
+  }
   const name = state.settings.names[mode] || (mode === 'tech' ? 'Edson' : 'Ana Paula');
   return SYSTEM_PROMPTS[mode].replace(/\{\{LEARNER_NAME\}\}/g, name);
 }
@@ -507,7 +585,7 @@ function renderChat() {
   screens.chat.innerHTML = `
     <div class="chat-header">
       <div class="title">
-        <h2>${state.mode === 'care' ? '🏥 Care' : '💻 Tech'}</h2>
+        <h2>${state.mode === 'care' ? '🏥 Care' : state.mode === 'daily' ? '🌟 Dia a Dia' : '💻 Tech'}</h2>
         <span class="streak">🔥 ${streak.count}</span>
       </div>
       <div class="row" style="gap:10px;align-items:center;">
@@ -821,7 +899,7 @@ function renderReport() {
   let human = raw.replace(/<!--REPORT_JSON[\s\S]*?-->/, '').trim();
   if (!human) {
     // Reconstruct from JSON
-    human = `# Relatório de Sessão — ${r.mode === 'care' ? 'Care' : 'Tech'}\n\n` +
+    human = `# Relatório de Sessão — ${r.mode === 'care' ? 'Care' : r.mode === 'daily' ? 'Dia a Dia' : 'Tech'}\n\n` +
       `**Nível CEFR estimado:** ${r.cefr_estimate || '—'}\n\n` +
       `🏆 **Destaques**\n${(r.wins || []).map(w => `- ${w}`).join('\n') || '—'}\n\n` +
       `🔧 **Padrões de erro**\n${(r.error_patterns || []).map(e => `- ${e.pattern}${e.safety_critical ? ' ⚠️' : ''}`).join('\n') || '—'}\n\n` +
@@ -915,13 +993,14 @@ function renderHistory() {
       <option value="all" ${filter==='all'?'selected':''}>Todos</option>
       <option value="tech" ${filter==='tech'?'selected':''}>Tech</option>
       <option value="care" ${filter==='care'?'selected':''}>Care</option>
+      <option value="daily" ${filter==='daily'?'selected':''}>Daily</option>
     </select>
     <div class="history-list">
       ${reports.length === 0 ? '<p class="text-muted text-center">Nenhum relatório ainda.</p>' : ''}
       ${reports.slice().reverse().map(r => `
         <div class="history-item" data-id="${escapeHtml(r.id)}">
           <div>
-            <div><strong>${new Date(r.date).toLocaleDateString('pt-BR')}</strong> · ${r.mode === 'care' ? '🏥 Care' : '💻 Tech'}</div>
+            <div><strong>${new Date(r.date).toLocaleDateString('pt-BR')}</strong> · ${r.mode === 'care' ? '🏥 Care' : r.mode === 'daily' ? '🌟 Dia a Dia' : '💻 Tech'}</div>
             <div class="text-muted">CEFR: ${escapeHtml(r.cefr_estimate || '—')}</div>
           </div>
           <span class="badge">${escapeHtml(r.cefr_estimate || '—')}</span>
