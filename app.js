@@ -605,6 +605,36 @@ function renderTutorBubble(bubble, { character, feedback }) {
   replay.textContent = '🔊 Replay';
   replay.onclick = () => speakLine(character);
   bubble.appendChild(replay);
+  const translateBtn = document.createElement('button');
+  translateBtn.className = 'replay-btn';
+  translateBtn.textContent = '🇧🇷 Traduzir';
+  const translationDiv = document.createElement('div');
+  translationDiv.className = 'translation';
+  translationDiv.style.display = 'none';
+  let translated = false;
+  translateBtn.onclick = async () => {
+    if (translated) {
+      const showing = translationDiv.style.display !== 'none';
+      translationDiv.style.display = showing ? 'none' : 'block';
+      translateBtn.textContent = showing ? '🇧🇷 Traduzir' : '🇧🇷 Ocultar';
+      return;
+    }
+    translateBtn.textContent = '🇧🇷 Traduzindo…';
+    translateBtn.disabled = true;
+    const pt = await translateToPT(character);
+    translateBtn.disabled = false;
+    if (pt) {
+      translationDiv.textContent = pt;
+      translationDiv.style.display = 'block';
+      translated = true;
+      translateBtn.textContent = '🇧🇷 Ocultar';
+    } else {
+      translateBtn.textContent = '🇧🇷 Traduzir';
+      toast('Erro ao traduzir', 'danger');
+    }
+  };
+  bubble.appendChild(translateBtn);
+  bubble.appendChild(translationDiv);
   // Feedback card
   if (feedback) {
     const hasSafety = /⚠️|safety|critical|constipated|intoxicated|injury|dose|wrong word/i.test(feedback);
@@ -678,6 +708,28 @@ function speakLine(text) {
   }
   utter.rate = state.settings.rate || 1.0;
   window.speechSynthesis.speak(utter);
+}
+
+async function translateToPT(text) {
+  const key = state.settings.apiKey;
+  if (!key) return null;
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: state.settings.model,
+        messages: [
+          { role: 'system', content: 'You are a translator. Translate the user English text into natural Brazilian Portuguese. Return ONLY the translation — no preamble, no quotes, no explanation.' },
+          { role: 'user', content: text }
+        ],
+        temperature: 0, max_tokens: 500, stream: false
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } catch (e) { return null; }
 }
 
 function hasSTT() {

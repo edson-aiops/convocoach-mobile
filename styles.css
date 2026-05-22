@@ -413,3 +413,11 @@ label {
   padding: 4px;
   margin-top: 6px;
 }
+
+.translation {
+  margin-top: 6px; padding: 8px 10px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px; font-size: 0.9rem;
+  color: var(--text); font-style: italic;
+  border-left: 2px solid var(--accent);
+}
