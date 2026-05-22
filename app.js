@@ -20,7 +20,7 @@ function loadSettings() {
   try {
     return {
       apiKey: localStorage.getItem('cc.apiKey') || '',
-      model: localStorage.getItem('cc.model') || 'llama-3.3-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       names: {
         tech: localStorage.getItem('cc.name.tech') || 'Edson',
         care: localStorage.getItem('cc.name.care') || 'Ana Paula',
@@ -38,7 +38,6 @@ function defaultSettings() {
 function saveSettings() {
   try {
     localStorage.setItem('cc.apiKey', state.settings.apiKey);
-    localStorage.setItem('cc.model', state.settings.model);
     localStorage.setItem('cc.name.tech', state.settings.names.tech);
     localStorage.setItem('cc.name.care', state.settings.names.care);
     localStorage.setItem('cc.voice.tts', String(state.settings.tts));
@@ -108,13 +107,6 @@ function renderSetup() {
         <a class="help-link" href="https://console.groq.com/keys" target="_blank" rel="noopener">Como obter chave Groq ↗</a>
       </div>
       <div class="setup-section">
-        <label for="model-select">Modelo</label>
-        <select id="model-select">
-          <option value="llama-3.3-70b-versatile" ${s.model === 'llama-3.3-70b-versatile' ? 'selected' : ''}>Llama 3.3 70B</option>
-          <option value="qwen/qwen3-32b" ${s.model === 'qwen/qwen3-32b' ? 'selected' : ''}>Qwen3 32B</option>
-        </select>
-      </div>
-      <div class="setup-section">
         <label for="name-tech">Nome (Modo Tech)</label>
         <input id="name-tech" value="${escapeHtml(s.names.tech)}" />
         <label for="name-care">Nome (Modo Care)</label>
@@ -137,7 +129,6 @@ function renderSetup() {
   populateVoiceSelect();
   document.getElementById('save-setup').onclick = () => {
     state.settings.apiKey = document.getElementById('api-key').value.trim();
-    state.settings.model = document.getElementById('model-select').value;
     state.settings.names.tech = document.getElementById('name-tech').value.trim() || 'Edson';
     state.settings.names.care = document.getElementById('name-care').value.trim() || 'Ana Paula';
     state.settings.tts = document.getElementById('tts-toggle').checked;
@@ -311,7 +302,6 @@ function sendSystemOpening() {
       scrollChatToBottom();
     },
     onDone: (full) => {
-      full = full.replace(/<think>[\s\S]*?<\/think>/gi, '').trimStart();
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
@@ -359,7 +349,6 @@ function sendUserMessage(text) {
       scrollChatToBottom();
     },
     onDone: (full) => {
-      full = full.replace(/<think>[\s\S]*?<\/think>/gi, '').trimStart();
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
@@ -393,7 +382,6 @@ function sendUserMessage(text) {
               scrollChatToBottom();
             },
             onDone: (full) => {
-              full = full.replace(/<think>[\s\S]*?<\/think>/gi, '').trimStart();
               const parsed = parseTutorContent(full);
               if (bubble) renderTutorBubble(bubble, parsed);
               state.messages.push({ role:'assistant', content: full });

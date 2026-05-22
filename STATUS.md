@@ -17,3 +17,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Post-audit fixes | ✅ Done | `afcbb0a` |
 | Translate button (EN→PT) | ✅ Done | — |
 | Mic auto-stop after 4s silence | ✅ Done | — |
+| Lock model to Llama 3.3, drop Qwen3 | ✅ Done | — |
