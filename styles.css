@@ -467,6 +467,17 @@ label {
   opacity: 0.6;
 }
 
+.update-pill {
+  display: inline-block;
+  font-size: 0.65rem;
+  background: var(--accent-daily);
+  color: #07141A;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
 .translation {
   margin-top: 6px; padding: 8px 10px;
   background: rgba(255,255,255,0.04);

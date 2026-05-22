@@ -1,4 +1,4 @@
-const CACHE_NAME = 'convocoach-v1.5.0';
+const CACHE_NAME = 'convocoach-v1.6.0';
 const SHELL = [
   './',
   './index.html',
@@ -23,6 +23,12 @@ self.addEventListener('activate', (e) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (e) => {

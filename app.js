@@ -1,6 +1,34 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
+
+/* ===================== SERVICE WORKER ===================== */
+let swRegistration = null;
+let swUpdateReady = false;
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then((reg) => {
+    swRegistration = reg;
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          swUpdateReady = true;
+          const badge = document.getElementById('update-available');
+          if (badge) badge.hidden = false;
+        }
+      });
+    });
+  }).catch(() => {});
+
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+}
 
 /* ===================== INSTALL PROMPT ===================== */
 let deferredInstallPrompt = null;
@@ -140,6 +168,13 @@ function renderSetup() {
       <div class="setup-section">
         <label><input type="checkbox" id="auto-send" ${s.autoSendSTT ? 'checked' : ''} /> Enviar automaticamente após ditado</label>
       </div>
+      <div class="setup-section">
+        <label>Versão do app</label>
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span class="text-muted">v${APP_VERSION} <span id="update-available" class="update-pill" hidden>nova versão disponível</span></span>
+          <button id="update-btn" class="btn btn-secondary" style="width:auto;">🔄 Atualizar</button>
+        </div>
+      </div>
       <button id="save-setup" class="btn btn-primary">Salvar</button>
       <button id="goto-home" class="btn btn-secondary">Voltar</button>
     </div>
@@ -160,6 +195,36 @@ function renderSetup() {
   document.getElementById('goto-home').onclick = () => showScreen('home');
   const rateSlider = document.getElementById('rate-slider');
   if (rateSlider) rateSlider.oninput = (e) => { document.getElementById('rate-val').textContent = parseFloat(e.target.value).toFixed(1); };
+  const updateBtn = document.getElementById('update-btn');
+  if (updateBtn) {
+    const badge = document.getElementById('update-available');
+    if (swUpdateReady && badge) badge.hidden = false;
+    updateBtn.onclick = async () => {
+      if (!('serviceWorker' in navigator) || !swRegistration) {
+        toast('Atualização indisponível neste navegador.');
+        return;
+      }
+      updateBtn.disabled = true;
+      updateBtn.textContent = '🔄 Verificando…';
+      try {
+        await swRegistration.update();
+        const waiting = swRegistration.waiting;
+        if (waiting) {
+          waiting.postMessage({ type: 'SKIP_WAITING' });
+          toast('Atualizando para a versão nova…');
+          setTimeout(() => window.location.reload(), 3000);
+        } else {
+          updateBtn.disabled = false;
+          updateBtn.textContent = '🔄 Atualizar';
+          toast('Você já está na versão mais recente.');
+        }
+      } catch (e) {
+        updateBtn.disabled = false;
+        updateBtn.textContent = '🔄 Atualizar';
+        toast('Não foi possível verificar agora. Tente de novo.');
+      }
+    };
+  }
 }
 
 function populateVoiceSelect() {
