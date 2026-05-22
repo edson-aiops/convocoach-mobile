@@ -459,6 +459,14 @@ label {
   margin-top: 6px;
 }
 
+.version-badge {
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 8px 0 4px;
+  opacity: 0.6;
+}
+
 .translation {
   margin-top: 6px; padding: 8px 10px;
   background: rgba(255,255,255,0.04);

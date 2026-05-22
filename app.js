@@ -1,5 +1,21 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
+const APP_VERSION = '1.5.0';
+
+/* ===================== INSTALL PROMPT ===================== */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('install-btn');
+  if (btn) btn.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  const btn = document.getElementById('install-btn');
+  if (btn) btn.hidden = true;
+});
+
 /* ===================== STATE ===================== */
 const state = {
   screen: 'setup',
@@ -192,6 +208,8 @@ function renderHome() {
       </div>
     </div>
     <button id="home-history" class="btn btn-secondary">📜 Histórico</button>
+    <button id="install-btn" class="btn btn-secondary" hidden>📲 Instalar app</button>
+    <div class="version-badge">v${APP_VERSION}</div>
   `;
   document.getElementById('home-gear').onclick = () => showScreen('setup');
   document.getElementById('home-history').onclick = () => showScreen('history');
@@ -201,6 +219,28 @@ function renderHome() {
       else startMode(card.dataset.mode);
     };
   });
+  const installBtn = document.getElementById('install-btn');
+  if (installBtn) {
+    if (deferredInstallPrompt) installBtn.hidden = false;
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isIOS && !isStandalone) {
+      installBtn.hidden = false;
+      installBtn.textContent = '📲 Como instalar';
+    }
+    installBtn.onclick = async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        installBtn.hidden = true;
+      } else if (isIOS) {
+        toast('No iPhone: toque em Compartilhar → "Adicionar à Tela de Início"');
+      } else {
+        toast('App já instalado ou instalação indisponível neste navegador.');
+      }
+    };
+  }
 }
 
 function startMode(mode) {
