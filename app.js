@@ -311,7 +311,7 @@ function sendSystemOpening() {
       scrollChatToBottom();
     },
     onDone: (full) => {
-      full = full.replace(/^[\s\S]*?<\/think>/i, '').trimStart();
+      full = full.replace(/<think>[\s\S]*?<\/think>/gi, '').trimStart();
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
@@ -359,7 +359,7 @@ function sendUserMessage(text) {
       scrollChatToBottom();
     },
     onDone: (full) => {
-      full = full.replace(/^[\s\S]*?<\/think>/i, '').trimStart();
+      full = full.replace(/<think>[\s\S]*?<\/think>/gi, '').trimStart();
       const parsed = parseTutorContent(full);
       if (bubble) renderTutorBubble(bubble, parsed);
       state.messages.push({ role:'assistant', content: full });
@@ -393,7 +393,7 @@ function sendUserMessage(text) {
               scrollChatToBottom();
             },
             onDone: (full) => {
-              full = full.replace(/^[\s\S]*?<\/think>/i, '').trimStart();
+              full = full.replace(/<think>[\s\S]*?<\/think>/gi, '').trimStart();
               const parsed = parseTutorContent(full);
               if (bubble) renderTutorBubble(bubble, parsed);
               state.messages.push({ role:'assistant', content: full });
