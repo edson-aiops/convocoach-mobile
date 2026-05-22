@@ -15,3 +15,5 @@ Branch: `feature/kimi-convocoach-mobile`
 | T9 Acceptance pass | ✅ Done | `7ff2274` |
 | T10 README + docs | ✅ Done | — |
 | Post-audit fixes | ✅ Done | `afcbb0a` |
+| Translate button (EN→PT) | ✅ Done | — |
+| Mic auto-stop after 4s silence | ✅ Done | — |

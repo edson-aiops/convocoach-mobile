@@ -751,6 +751,8 @@ function initMic() {
     primeTTS();
     if (rec) { try { rec.stop(); } catch(e){} }
     finalTranscript = '';
+    let speechDetected = false;
+    let silenceTimer = null;
     rec = new SpeechRec();
     rec.lang = 'en-US';
     rec.interimResults = true;
@@ -760,8 +762,11 @@ function initMic() {
       state.recording = true;
       btn.classList.add('recording');
       if (interim) interim.textContent = 'Ouvindo…';
+      silenceTimer = setTimeout(() => { if (!speechDetected) stopRec(); }, 4000);
     };
     rec.onresult = (e) => {
+      speechDetected = true;
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
       let interimText = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
@@ -771,6 +776,7 @@ function initMic() {
       if (interim) interim.textContent = interimText;
     };
     rec.onerror = (e) => {
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
       state.recording = false;
       btn.classList.remove('recording');
       if (interim) interim.textContent = '';
@@ -782,6 +788,7 @@ function initMic() {
       toast(map[e.error] || `Erro de reconhecimento: ${e.error}`, 'danger');
     };
     rec.onend = () => {
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
       state.recording = false;
       btn.classList.remove('recording');
       if (interim) interim.textContent = '';
