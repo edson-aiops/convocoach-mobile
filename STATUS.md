@@ -23,3 +23,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Update button + SW update detection | ✅ Done | — |
 | Family mode: Pedro (Teen) + Manu (Kids) | ✅ Done | — |
 | Fix home scroll with 4 cards | ✅ Done | — |
+| Fix kids mic, card title overflow, family emoji | ✅ Done | — |

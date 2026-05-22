@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.7.2';
 
 /* ===================== SERVICE WORKER ===================== */
 let swRegistration = null;
@@ -274,7 +274,7 @@ function renderHome() {
         <div class="stat">🔥 ${streak.count} dias · ${lastDaily ? 'CEFR: ' + lastDaily.cefr_estimate : 'Iniciar'}</div>
       </div>
       <div class="mode-card family" data-mode="family">
-        <h2>👨‍👩‍👧‍👦 Família</h2>
+        <h2>👪 Família</h2>
         <p>Inglês para o Pedro e a Manu.</p>
         <div class="stat">Pedro & Manu</div>
       </div>
@@ -391,7 +391,7 @@ function renderFamilyPicker() {
   screens.family.innerHTML = `
     <div class="daily-scroll">
       <div class="daily-section">
-        <h2>👨‍👩‍👧‍👦 Família</h2>
+        <h2>👪 Família</h2>
         <p>Quem vai praticar hoje?</p>
       </div>
       <div class="scenario-grid">
@@ -972,7 +972,7 @@ function initMic() {
   const btn = document.getElementById('mic-btn');
   const input = document.getElementById('chat-input');
   const interim = document.getElementById('interim');
-  if (!btn || !input) return;
+  if (!btn) return;
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRec) return;
 
@@ -1025,7 +1025,7 @@ function initMic() {
       btn.classList.remove('recording');
       if (interim) interim.textContent = '';
       if (finalTranscript.trim()) {
-        if (state.settings.autoSendSTT) {
+        if (state.mode === 'kids' || state.settings.autoSendSTT || !input) {
           sendUserMessage(finalTranscript.trim());
         } else {
           input.value = finalTranscript.trim();
