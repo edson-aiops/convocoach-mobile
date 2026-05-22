@@ -205,9 +205,12 @@ function startMode(mode) {
   state.mode = mode;
   state.messages = [];
   state.cleanTurns = 0;
+  state.expectingReport = false;
+  state.endSessionRequested = false;
   state.sessionStart = Date.now();
   setAccent(mode);
   showScreen('chat');
+  primeTTS();
   sendSystemOpening();
 }
 
@@ -888,10 +891,13 @@ function renderReport() {
   document.getElementById('new-session').onclick = () => {
     state.messages = [];
     state.cleanTurns = 0;
+    state.expectingReport = false;
+    state.endSessionRequested = false;
     state.sessionStart = Date.now();
     state.reportData = null;
     state.reportRaw = '';
     showScreen('chat');
+    primeTTS();
     sendSystemOpening();
   };
 }
