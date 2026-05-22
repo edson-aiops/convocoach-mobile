@@ -6,6 +6,8 @@
   --accent-tech: #00D4AA;
   --accent-care: #FF9E7D;
   --accent-daily: #A78BFA;
+  --accent-teen: #FFD93D;
+  --accent-kids: #FF6FB5;
   --danger: #FF5C5C;
   --ok: #3FB950;
   --accent: var(--accent-tech);
@@ -148,7 +150,7 @@ label {
 .home-grid {
   flex: 1;
   display: grid;
-  grid-template-rows: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
   gap: 16px;
   padding-bottom: 8px;
 }
@@ -162,16 +164,22 @@ label {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  min-height: 120px;
+  min-height: 100px;
   transition: border-color .15s, transform .05s;
 }
 .mode-card:active { transform: scale(0.98); }
 .mode-card.tech { border-color: var(--accent-tech); }
 .mode-card.care { border-color: var(--accent-care); }
 .mode-card.daily { border-color: var(--accent-daily); }
+.mode-card.family { border-color: var(--accent-teen); }
+.mode-card.teen { border-color: var(--accent-teen); }
+.mode-card.kids { border-color: var(--accent-kids); }
 .mode-card.tech h2 { color: var(--accent-tech); }
 .mode-card.care h2 { color: var(--accent-care); }
 .mode-card.daily h2 { color: var(--accent-daily); }
+.mode-card.family h2 { color: var(--accent-teen); }
+.mode-card.teen h2 { color: var(--accent-teen); }
+.mode-card.kids h2 { color: var(--accent-kids); }
 .mode-card .stat {
   font-size: 0.8rem;
   color: var(--muted);
@@ -485,3 +493,8 @@ label {
   color: var(--text); font-style: italic;
   border-left: 2px solid var(--accent);
 }
+
+/* Family mode: hide text input for kids, enlarge mic */
+#chat-screen.kids .composer input,
+#chat-screen.kids .composer .send-btn { display: none !important; }
+#chat-screen.kids .mic-btn { transform: scale(1.4); }

@@ -21,3 +21,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Add Daily Life mode with 4 scenarios | ✅ Done | — |
 | Version badge + install button + versioned SW | ✅ Done | — |
 | Update button + SW update detection | ✅ Done | — |
+| Family mode: Pedro (Teen) + Manu (Kids) | ✅ Done | — |

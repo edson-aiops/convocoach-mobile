@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 
 /* ===================== SERVICE WORKER ===================== */
 let swRegistration = null;
@@ -116,6 +116,7 @@ const screens = {
   report: document.getElementById('report-screen'),
   history: document.getElementById('history-screen'),
   daily: document.getElementById('daily-screen'),
+  family: document.getElementById('family-screen'),
 };
 const toastContainer = document.getElementById('toast-container');
 
@@ -130,6 +131,7 @@ function showScreen(name) {
   if (name === 'report') renderReport();
   if (name === 'history') renderHistory();
   if (name === 'daily') renderDailyPicker();
+  if (name === 'family') renderFamilyPicker();
 }
 
 /* ===================== TOAST ===================== */
@@ -271,6 +273,11 @@ function renderHome() {
         <p>Restaurante, viagem, compras e conversa livre.</p>
         <div class="stat">🔥 ${streak.count} dias · ${lastDaily ? 'CEFR: ' + lastDaily.cefr_estimate : 'Iniciar'}</div>
       </div>
+      <div class="mode-card family" data-mode="family">
+        <h2>👨‍👩‍👧‍👦 Família</h2>
+        <p>Inglês para o Pedro e a Manu.</p>
+        <div class="stat">Pedro & Manu</div>
+      </div>
     </div>
     <button id="home-history" class="btn btn-secondary">📜 Histórico</button>
     <button id="install-btn" class="btn btn-secondary" hidden>📲 Instalar app</button>
@@ -281,6 +288,7 @@ function renderHome() {
   screens.home.querySelectorAll('.mode-card').forEach(card => {
     card.onclick = () => {
       if (card.dataset.mode === 'daily') showScreen('daily');
+      else if (card.dataset.mode === 'family') showScreen('family');
       else startMode(card.dataset.mode);
     };
   });
@@ -379,8 +387,47 @@ function startDaily(scenarioKey, personName) {
   sendSystemOpening();
 }
 
+function renderFamilyPicker() {
+  screens.family.innerHTML = `
+    <div class="daily-scroll">
+      <div class="daily-section">
+        <h2>👨‍👩‍👧‍👦 Família</h2>
+        <p>Quem vai praticar hoje?</p>
+      </div>
+      <div class="scenario-grid">
+        <button class="mode-card teen" data-person="teen">
+          <h2>🎮 Pedro</h2>
+          <p style="font-size:0.8rem;color:var(--muted);">Conversa para teen</p>
+        </button>
+        <button class="mode-card kids" data-person="kids">
+          <h2>☀️ Manu</h2>
+          <p style="font-size:0.8rem;color:var(--muted);">Joguinhos de inglês</p>
+        </button>
+      </div>
+      <button id="family-back" class="btn btn-secondary">Voltar</button>
+    </div>
+  `;
+  screens.family.querySelectorAll('.scenario-grid .mode-card').forEach(card => {
+    card.onclick = () => startFamily(card.dataset.person);
+  });
+  document.getElementById('family-back').onclick = () => showScreen('home');
+}
+
+function startFamily(person) {
+  state.mode = person; // 'teen' or 'kids'
+  state.messages = [];
+  state.cleanTurns = 0;
+  state.expectingReport = false;
+  state.endSessionRequested = false;
+  state.sessionStart = Date.now();
+  setAccent(person);
+  showScreen('chat');
+  primeTTS();
+  sendSystemOpening();
+}
+
 function setAccent(mode) {
-  const accent = mode === 'care' ? 'var(--accent-care)' : mode === 'daily' ? 'var(--accent-daily)' : 'var(--accent-tech)';
+  const accent = mode === 'care' ? 'var(--accent-care)' : mode === 'daily' ? 'var(--accent-daily)' : mode === 'teen' ? 'var(--accent-teen)' : mode === 'kids' ? 'var(--accent-kids)' : 'var(--accent-tech)';
   document.documentElement.style.setProperty('--accent', accent);
 }
 
@@ -393,6 +440,12 @@ function buildSystemPrompt(mode) {
     return SYSTEM_PROMPTS.daily
       .replace(/\{\{SCENARIO\}\}/g, scenarioContext)
       .replace(/\{\{LEARNER_NAME\}\}/g, name);
+  }
+  if (mode === 'teen') {
+    return SYSTEM_PROMPTS.teen.replace(/\{\{LEARNER_NAME\}\}/g, 'Pedro');
+  }
+  if (mode === 'kids') {
+    return SYSTEM_PROMPTS.kids.replace(/\{\{LEARNER_NAME\}\}/g, 'Manu');
   }
   const name = state.settings.names[mode] || (mode === 'tech' ? 'Edson' : 'Ana Paula');
   return SYSTEM_PROMPTS[mode].replace(/\{\{LEARNER_NAME\}\}/g, name);
@@ -463,7 +516,7 @@ async function streamResponse(messages, opts = {}) {
 /* ===================== CONVERSATION ENGINE ===================== */
 function isEndSessionTrigger(text) {
   const t = text.trim().toLowerCase();
-  return /^(stop|chega|acabamos)\b/i.test(t);
+  return /^(stop|chega|acabamos|tchau|acabou)\b/i.test(t);
 }
 
 function sendSystemOpening() {
@@ -628,7 +681,7 @@ function parseReport(raw) {
     try {
       const data = JSON.parse(m[1].trim());
       const report = { ...data, id: data.id || uuid(), date: data.date || new Date().toISOString(), mode: state.mode };
-      if (state.cleanTurns > 0) {
+      if (state.cleanTurns > 0 && state.mode !== 'kids') {
         report.wins = report.wins || [];
         report.wins.unshift(`${state.cleanTurns} turn(s) limpo(s) nesta sessão`);
       }
@@ -687,10 +740,13 @@ function accumulateVocab(items) {
 /* ===================== CHAT UI ===================== */
 function renderChat() {
   const streak = getStreak();
+  const isKids = state.mode === 'kids';
+  screens.chat.classList.toggle('kids', isKids);
+  const title = state.mode === 'care' ? '🏥 Care' : state.mode === 'daily' ? '🌟 Dia a Dia' : state.mode === 'teen' ? '🎮 Pedro' : state.mode === 'kids' ? '☀️ Manu' : '💻 Tech';
   screens.chat.innerHTML = `
     <div class="chat-header">
       <div class="title">
-        <h2>${state.mode === 'care' ? '🏥 Care' : state.mode === 'daily' ? '🌟 Dia a Dia' : '💻 Tech'}</h2>
+        <h2>${title}</h2>
         <span class="streak">🔥 ${streak.count}</span>
       </div>
       <div class="row" style="gap:10px;align-items:center;">
@@ -703,17 +759,19 @@ function renderChat() {
     <div id="interim" class="interim"></div>
     <div class="composer">
       <div class="composer-row">
-        <input id="chat-input" placeholder="Digite em inglês..." autocomplete="off" />
+        ${isKids ? '' : `<input id="chat-input" placeholder="Digite em inglês..." autocomplete="off" />`}
         ${hasSTT() ? `<button id="mic-btn" class="mic-btn">🎙️</button>` : ''}
-        <button id="send-btn" class="send-btn">➤</button>
+        ${isKids ? '' : `<button id="send-btn" class="send-btn">➤</button>`}
       </div>
       ${!hasSTT() ? '<div class="text-muted text-center" style="font-size:0.8rem;">Ditado por voz não disponível neste navegador — use o teclado.</div>' : ''}
     </div>
   `;
-  const input = document.getElementById('chat-input');
-  const send = () => { primeTTS(); sendUserMessage(input.value); input.value = ''; };
-  document.getElementById('send-btn').onclick = send;
-  input.onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  if (!isKids) {
+    const input = document.getElementById('chat-input');
+    const send = () => { primeTTS(); sendUserMessage(input.value); input.value = ''; };
+    document.getElementById('send-btn').onclick = send;
+    input.onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  }
   document.getElementById('end-session').onclick = () => {
     state.endSessionRequested = true;
     sendUserMessage('stop');
@@ -860,7 +918,7 @@ function primeTTS() {
 }
 
 function speakLine(text) {
-  if (!state.settings.tts || !window.speechSynthesis) return;
+  if ((!state.settings.tts && state.mode !== 'kids') || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const clean = String(text)
     .replace(/^🎭\s*/, '')
@@ -1002,63 +1060,93 @@ function renderReport() {
   const raw = state.reportRaw || '';
   // Extract human-readable portion above JSON block
   let human = raw.replace(/<!--REPORT_JSON[\s\S]*?-->/, '').trim();
-  if (!human) {
-    // Reconstruct from JSON
-    human = `# Relatório de Sessão — ${r.mode === 'care' ? 'Care' : r.mode === 'daily' ? 'Dia a Dia' : 'Tech'}\n\n` +
-      `**Nível CEFR estimado:** ${r.cefr_estimate || '—'}\n\n` +
-      `🏆 **Destaques**\n${(r.wins || []).map(w => `- ${w}`).join('\n') || '—'}\n\n` +
-      `🔧 **Padrões de erro**\n${(r.error_patterns || []).map(e => `- ${e.pattern}${e.safety_critical ? ' ⚠️' : ''}`).join('\n') || '—'}\n\n` +
-      `📚 **Vocabulário novo**\n${(r.new_vocab || []).map(v => `- **${v.word}**: ${v.translation} — "${v.example}"`).join('\n') || '—'}\n\n` +
-      `🎬 **Próxima cena:** ${r.next_scene || '—'}\n\n` +
-      `⏱️ **Tempo de fala ativa:** ${r.active_speaking_minutes || 0} min`;
+
+  if (r.mode === 'kids') {
+    if (!human) {
+      human = `Sessão da Manu ☀️\n\n${r.note || '—'}\n\nPalavras praticadas:\n${(r.words_practiced || []).map(w => `- ${w}`).join('\n') || '—'}`;
+    }
+    screens.report.innerHTML = `
+      <div class="chat-header">
+        <h2>☀️ Sessão da Manu</h2>
+        <button id="report-close" class="btn btn-secondary" style="padding:8px 10px;">✕</button>
+      </div>
+      <div class="report-scroll">
+        <div class="report-section">
+          <h3>📝 Para os pais</h3>
+          <p>${escapeHtml(r.note || '—')}</p>
+        </div>
+        <div class="report-section">
+          <h3>🌟 Palavras praticadas</h3>
+          ${(r.words_practiced || []).map(w => `<p>• ${escapeHtml(w)}</p>`).join('') || '<p class="text-muted">—</p>'}
+        </div>
+        <div class="row row-wrap">
+          <button id="copy-report" class="btn btn-secondary grow">Copiar</button>
+          <button id="dl-md" class="btn btn-secondary grow">Baixar .md</button>
+        </div>
+        <button id="new-session" class="btn btn-primary">Nova sessão</button>
+      </div>
+    `;
+  } else {
+    if (!human) {
+      human = `# Relatório de Sessão — ${r.mode === 'care' ? 'Care' : r.mode === 'daily' ? 'Dia a Dia' : r.mode === 'teen' ? 'Pedro' : 'Tech'}\n\n` +
+        `**Nível CEFR estimado:** ${r.cefr_estimate || '—'}\n\n` +
+        `🏆 **Destaques**\n${(r.wins || []).map(w => `- ${w}`).join('\n') || '—'}\n\n` +
+        `🔧 **Padrões de erro**\n${(r.error_patterns || []).map(e => `- ${e.pattern}${e.safety_critical ? ' ⚠️' : ''}`).join('\n') || '—'}\n\n` +
+        `📚 **Vocabulário novo**\n${(r.new_vocab || []).map(v => `- **${v.word}**: ${v.translation} — "${v.example}"`).join('\n') || '—'}\n\n` +
+        `🎬 **Próxima cena:** ${r.next_scene || '—'}\n\n` +
+        `⏱️ **Tempo de fala ativa:** ${r.active_speaking_minutes || 0} min`;
+    }
+    screens.report.innerHTML = `
+      <div class="chat-header">
+        <h2>📊 Relatório</h2>
+        <button id="report-close" class="btn btn-secondary" style="padding:8px 10px;">✕</button>
+      </div>
+      <div class="report-scroll">
+        <div class="report-section">
+          <h3>🎯 Nível CEFR</h3>
+          <p>${escapeHtml(r.cefr_estimate || '—')}</p>
+        </div>
+        <div class="report-section">
+          <h3>🏆 Destaques</h3>
+          ${(r.wins || []).map(w => `<p>• ${escapeHtml(w)}</p>`).join('') || '<p class="text-muted">—</p>'}
+        </div>
+        <div class="report-section">
+          <h3>🔧 Padrões de erro</h3>
+          ${(r.error_patterns || []).map(e => `<p class="${e.safety_critical ? 'danger' : ''}">• ${escapeHtml(e.pattern)} ${e.safety_critical ? '⚠️' : ''}</p>`).join('') || '<p class="text-muted">—</p>'}
+        </div>
+        <div class="report-section">
+          <h3>📚 Vocabulário novo</h3>
+          ${(r.new_vocab || []).map(v => `<p><strong>${escapeHtml(v.word)}</strong> — ${escapeHtml(v.translation)}<br/><em>"${escapeHtml(v.example)}"</em></p>`).join('') || '<p class="text-muted">—</p>'}
+        </div>
+        <div class="report-section">
+          <h3>🎬 Próxima cena</h3>
+          <p>${escapeHtml(r.next_scene || '—')}</p>
+        </div>
+        <div class="report-section">
+          <h3>⏱️ Tempo de fala ativa</h3>
+          <p>${r.active_speaking_minutes || 0} min</p>
+        </div>
+        <div class="row row-wrap">
+          <button id="copy-report" class="btn btn-secondary grow">Copiar</button>
+          <button id="dl-md" class="btn btn-secondary grow">Baixar .md</button>
+          <button id="dl-vocab" class="btn btn-secondary grow">Exportar vocabulário (JSON)</button>
+        </div>
+        <button id="new-session" class="btn btn-primary">Nova sessão</button>
+      </div>
+    `;
   }
-  screens.report.innerHTML = `
-    <div class="chat-header">
-      <h2>📊 Relatório</h2>
-      <button id="report-close" class="btn btn-secondary" style="padding:8px 10px;">✕</button>
-    </div>
-    <div class="report-scroll">
-      <div class="report-section">
-        <h3>🎯 Nível CEFR</h3>
-        <p>${escapeHtml(r.cefr_estimate || '—')}</p>
-      </div>
-      <div class="report-section">
-        <h3>🏆 Destaques</h3>
-        ${(r.wins || []).map(w => `<p>• ${escapeHtml(w)}</p>`).join('') || '<p class="text-muted">—</p>'}
-      </div>
-      <div class="report-section">
-        <h3>🔧 Padrões de erro</h3>
-        ${(r.error_patterns || []).map(e => `<p class="${e.safety_critical ? 'danger' : ''}">• ${escapeHtml(e.pattern)} ${e.safety_critical ? '⚠️' : ''}</p>`).join('') || '<p class="text-muted">—</p>'}
-      </div>
-      <div class="report-section">
-        <h3>📚 Vocabulário novo</h3>
-        ${(r.new_vocab || []).map(v => `<p><strong>${escapeHtml(v.word)}</strong> — ${escapeHtml(v.translation)}<br/><em>"${escapeHtml(v.example)}"</em></p>`).join('') || '<p class="text-muted">—</p>'}
-      </div>
-      <div class="report-section">
-        <h3>🎬 Próxima cena</h3>
-        <p>${escapeHtml(r.next_scene || '—')}</p>
-      </div>
-      <div class="report-section">
-        <h3>⏱️ Tempo de fala ativa</h3>
-        <p>${r.active_speaking_minutes || 0} min</p>
-      </div>
-      <div class="row row-wrap">
-        <button id="copy-report" class="btn btn-secondary grow">Copiar</button>
-        <button id="dl-md" class="btn btn-secondary grow">Baixar .md</button>
-        <button id="dl-vocab" class="btn btn-secondary grow">Exportar vocabulário (JSON)</button>
-      </div>
-      <button id="new-session" class="btn btn-primary">Nova sessão</button>
-    </div>
-  `;
   document.getElementById('report-close').onclick = () => showScreen('home');
   document.getElementById('copy-report').onclick = () => {
     navigator.clipboard.writeText(human).then(() => toast('Copiado!')).catch(() => toast('Erro ao copiar','danger'));
   };
   document.getElementById('dl-md').onclick = () => downloadFile('relatorio.md', human, 'text/markdown');
-  document.getElementById('dl-vocab').onclick = () => {
-    const vocab = getVocab().filter(v => v.mode === state.mode);
-    downloadFile('vocabulario.json', JSON.stringify(vocab, null, 2), 'application/json');
-  };
+  const dlVocab = document.getElementById('dl-vocab');
+  if (dlVocab) {
+    dlVocab.onclick = () => {
+      const vocab = getVocab().filter(v => v.mode === state.mode);
+      downloadFile('vocabulario.json', JSON.stringify(vocab, null, 2), 'application/json');
+    };
+  }
   document.getElementById('new-session').onclick = () => {
     state.messages = [];
     state.cleanTurns = 0;
@@ -1099,18 +1187,25 @@ function renderHistory() {
       <option value="tech" ${filter==='tech'?'selected':''}>Tech</option>
       <option value="care" ${filter==='care'?'selected':''}>Care</option>
       <option value="daily" ${filter==='daily'?'selected':''}>Daily</option>
+      <option value="teen" ${filter==='teen'?'selected':''}>Pedro</option>
+      <option value="kids" ${filter==='kids'?'selected':''}>Manu</option>
     </select>
     <div class="history-list">
       ${reports.length === 0 ? '<p class="text-muted text-center">Nenhum relatório ainda.</p>' : ''}
-      ${reports.slice().reverse().map(r => `
+      ${reports.slice().reverse().map(r => {
+        const modeLabel = r.mode === 'care' ? '🏥 Care' : r.mode === 'daily' ? '🌟 Dia a Dia' : r.mode === 'teen' ? '🎮 Pedro' : r.mode === 'kids' ? '☀️ Manu' : '💻 Tech';
+        const subLabel = r.mode === 'kids' ? escapeHtml(r.note || '—') : `CEFR: ${escapeHtml(r.cefr_estimate || '—')}`;
+        const badge = r.mode === 'kids' ? '☀️' : escapeHtml(r.cefr_estimate || '—');
+        return `
         <div class="history-item" data-id="${escapeHtml(r.id)}">
           <div>
-            <div><strong>${new Date(r.date).toLocaleDateString('pt-BR')}</strong> · ${r.mode === 'care' ? '🏥 Care' : r.mode === 'daily' ? '🌟 Dia a Dia' : '💻 Tech'}</div>
-            <div class="text-muted">CEFR: ${escapeHtml(r.cefr_estimate || '—')}</div>
+            <div><strong>${new Date(r.date).toLocaleDateString('pt-BR')}</strong> · ${modeLabel}</div>
+            <div class="text-muted">${subLabel}</div>
           </div>
-          <span class="badge">${escapeHtml(r.cefr_estimate || '—')}</span>
+          <span class="badge">${badge}</span>
         </div>
-      `).join('')}
+      `;
+      }).join('')}
     </div>
     <button id="clear-hist" class="btn btn-danger">Limpar histórico</button>
   `;
