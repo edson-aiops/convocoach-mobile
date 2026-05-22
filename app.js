@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 
 /* ===================== SERVICE WORKER ===================== */
 let swRegistration = null;

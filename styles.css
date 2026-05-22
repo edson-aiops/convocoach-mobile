@@ -150,10 +150,12 @@ label {
 .home-grid {
   flex: 1;
   display: grid;
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-rows: repeat(4, auto);
   gap: 16px;
   padding-bottom: 8px;
+  overflow-y: auto;
 }
+#home-screen { overflow-y: auto; }
 .mode-card {
   background: var(--surface);
   border-radius: var(--radius);
@@ -164,7 +166,7 @@ label {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  min-height: 100px;
+  min-height: 90px;
   transition: border-color .15s, transform .05s;
 }
 .mode-card:active { transform: scale(0.98); }

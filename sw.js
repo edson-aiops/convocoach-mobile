@@ -1,4 +1,4 @@
-const CACHE_NAME = 'convocoach-v1.7.0';
+const CACHE_NAME = 'convocoach-v1.7.1';
 const SHELL = [
   './',
   './index.html',

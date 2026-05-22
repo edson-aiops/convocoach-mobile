@@ -22,3 +22,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Version badge + install button + versioned SW | ✅ Done | — |
 | Update button + SW update detection | ✅ Done | — |
 | Family mode: Pedro (Teen) + Manu (Kids) | ✅ Done | — |
+| Fix home scroll with 4 cards | ✅ Done | — |
