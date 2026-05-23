@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
 
-const APP_VERSION = '1.7.2';
+const APP_VERSION = '1.7.3';
 
 /* ===================== SERVICE WORKER ===================== */
 let swRegistration = null;
@@ -87,7 +87,10 @@ function saveSettings() {
     localStorage.setItem('cc.voice.tts', String(state.settings.tts));
     localStorage.setItem('cc.voice.voiceURI', state.settings.voiceURI);
     localStorage.setItem('cc.voice.rate', String(state.settings.rate));
-  } catch (e) { toast('Erro ao salvar configurações','danger'); }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e };
+  }
 }
 function getReports() {
   try { return JSON.parse(localStorage.getItem('cc.reports') || '[]'); } catch (e) { return []; }
@@ -190,9 +193,16 @@ function renderSetup() {
     state.settings.voiceURI = document.getElementById('voice-select').value;
     state.settings.rate = parseFloat(document.getElementById('rate-slider').value);
     state.settings.autoSendSTT = document.getElementById('auto-send').checked;
-    saveSettings();
-    toast('Configurações salvas');
-    if (state.mode) showScreen('home');
+    const result = saveSettings();
+    if (result.ok) {
+      toast('Configurações salvas');
+      if (state.mode) showScreen('home');
+    } else {
+      const msg = (result.error && result.error.name === 'QuotaExceededError')
+        ? 'Armazenamento cheio. Libere espaço no navegador.'
+        : 'Não foi possível salvar. O armazenamento do site pode estar bloqueado (verifique as permissões do site no navegador, ou se está em aba anônima).';
+      toast(msg, 'danger');
+    }
   };
   document.getElementById('goto-home').onclick = () => showScreen('home');
   const rateSlider = document.getElementById('rate-slider');
