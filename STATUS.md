@@ -26,3 +26,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Fix kids mic, card title overflow, family emoji | ✅ Done | — |
 | Fix save settings honest success/error feedback | ✅ Done | — |
 | Lower difficulty: simpler vocab + shorter sentences for tech/care/daily | ✅ Done | — |
+| Kids mode: emoji-rich visual learning, English-only (no PT) | ✅ Done | — |
