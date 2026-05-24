@@ -25,3 +25,4 @@ Branch: `feature/kimi-convocoach-mobile`
 | Fix home scroll with 4 cards | ✅ Done | — |
 | Fix kids mic, card title overflow, family emoji | ✅ Done | — |
 | Fix save settings honest success/error feedback | ✅ Done | — |
+| Lower difficulty: simpler vocab + shorter sentences for tech/care/daily | ✅ Done | — |
