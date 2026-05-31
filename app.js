@@ -1,4 +1,5 @@
 import { SYSTEM_PROMPTS, DAILY_SCENARIOS } from './prompts.js';
+import { fetchTargets, reportConversationUse } from './mastery.js';
 
 const APP_VERSION = '1.7.5';
 
@@ -57,6 +58,8 @@ const state = {
   recognition: null,
   cleanTurns: 0,
   sessionStart: null,
+  sessionTargets: [],
+  usedTargets: new Set(),
 };
 
 /* ===================== STORAGE ===================== */
@@ -326,13 +329,22 @@ function renderHome() {
   }
 }
 
-function startMode(mode) {
+async function startMode(mode) {
   state.mode = mode;
   state.messages = [];
   state.cleanTurns = 0;
   state.expectingReport = false;
   state.endSessionRequested = false;
   state.sessionStart = Date.now();
+  state.usedTargets = new Set();
+  // Carregar alvos do mastery (degradacao graciosa: falha silenciosa)
+  try {
+    const targets = await fetchTargets();
+    state.sessionTargets = targets.map(t => t.word);
+    console.log('[mastery] targets loaded:', state.sessionTargets);
+  } catch (e) {
+    state.sessionTargets = [];
+  }
   setAccent(mode);
   showScreen('chat');
   primeTTS();
@@ -382,7 +394,7 @@ function renderDailyPicker() {
   document.getElementById('daily-back').onclick = () => showScreen('home');
 }
 
-function startDaily(scenarioKey, personName) {
+async function startDaily(scenarioKey, personName) {
   state.mode = 'daily';
   state.dailyScenario = scenarioKey;
   state.dailyName = personName;
@@ -391,6 +403,14 @@ function startDaily(scenarioKey, personName) {
   state.expectingReport = false;
   state.endSessionRequested = false;
   state.sessionStart = Date.now();
+  state.usedTargets = new Set();
+  try {
+    const targets = await fetchTargets();
+    state.sessionTargets = targets.map(t => t.word);
+    console.log('[mastery] targets loaded:', state.sessionTargets);
+  } catch (e) {
+    state.sessionTargets = [];
+  }
   setAccent('daily');
   showScreen('chat');
   primeTTS();
@@ -423,13 +443,21 @@ function renderFamilyPicker() {
   document.getElementById('family-back').onclick = () => showScreen('home');
 }
 
-function startFamily(person) {
+async function startFamily(person) {
   state.mode = person; // 'teen' or 'kids'
   state.messages = [];
   state.cleanTurns = 0;
   state.expectingReport = false;
   state.endSessionRequested = false;
   state.sessionStart = Date.now();
+  state.usedTargets = new Set();
+  try {
+    const targets = await fetchTargets();
+    state.sessionTargets = targets.map(t => t.word);
+    console.log('[mastery] targets loaded:', state.sessionTargets);
+  } catch (e) {
+    state.sessionTargets = [];
+  }
   setAccent(person);
   showScreen('chat');
   primeTTS();
@@ -530,7 +558,12 @@ function isEndSessionTrigger(text) {
 }
 
 function sendSystemOpening() {
-  state.messages = [{ role:'system', content: buildSystemPrompt(state.mode) }];
+  let systemContent = buildSystemPrompt(state.mode);
+  if (state.sessionTargets?.length) {
+    const targetList = state.sessionTargets.slice(0, 15).join(', ');
+    systemContent += `\n\nTarget vocabulary for this session (encourage natural use, don't force): ${targetList}`;
+  }
+  state.messages = [{ role:'system', content: systemContent }];
   state.streaming = true;
   appendTutorBubble(''); // placeholder
   const bubble = lastTutorBubble();
@@ -567,6 +600,7 @@ function sendSystemOpening() {
 
 function sendUserMessage(text) {
   if (!text.trim() || state.streaming) return;
+  detectAndReportTargets(text);
   const triggerEnd = isEndSessionTrigger(text) || state.endSessionRequested;
   appendLearnerBubble(text);
   state.messages.push({ role:'user', content: text });
@@ -667,6 +701,31 @@ function maybeTrackCleanTurn(full) {
   }
 }
 
+/* ===================== MASTERY TARGETS DETECTION ===================== */
+function detectAndReportTargets(text) {
+  if (!state.sessionTargets?.length || !text) return;
+  const lowerText = text.toLowerCase();
+  for (const word of state.sessionTargets) {
+    if (state.usedTargets.has(word)) continue;
+    // Match de palavra inteira, case-insensitive. Escapa regex.
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('\\b' + escaped + '\\b', 'i');
+    if (re.test(lowerText)) {
+      state.usedTargets.add(word);
+      reportConversationUse(word, state.mode);
+      toast('Target: "' + word + '" usado!', 'success');
+      updateTargetHeader();
+    }
+  }
+}
+
+function updateTargetHeader() {
+  const badge = document.querySelector('.targets-indicator');
+  if (!badge || !state.sessionTargets?.length) return;
+  const usedCount = state.sessionTargets.filter(w => state.usedTargets.has(w)).length;
+  badge.textContent = '🎯 ' + usedCount + '/' + state.sessionTargets.length;
+}
+
 function handleEndSession(raw) {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   state.expectingReport = false;
@@ -753,10 +812,13 @@ function renderChat() {
   const isKids = state.mode === 'kids';
   screens.chat.classList.toggle('kids', isKids);
   const title = state.mode === 'care' ? '🏥 Care' : state.mode === 'daily' ? '🌟 Dia a Dia' : state.mode === 'teen' ? '🎮 Pedro' : state.mode === 'kids' ? '☀️ Manu' : '💻 Tech';
+  const targetBadge = state.sessionTargets?.length
+    ? `<span class="targets-indicator" style="font-size:0.75rem;color:var(--muted);margin-left:6px;">🎯 0/${state.sessionTargets.length}</span>`
+    : '';
   screens.chat.innerHTML = `
     <div class="chat-header">
       <div class="title">
-        <h2>${title}</h2>
+        <h2>${title}${targetBadge}</h2>
         <span class="streak">🔥 ${streak.count}</span>
       </div>
       <div class="row" style="gap:10px;align-items:center;">
