@@ -3,7 +3,7 @@
  * Degradacao graciosa em todas as chamadas (try/catch silencioso).
  */
 
-export const MASTERY_API_URL = 'http://localhost:8000'; // TODO: apontar para HF Space em producao
+export const MASTERY_API_URL = 'https://edsonpo-vocab-mastery-api.hf.space';
 
 /** GET /mastery/targets — retorna array de palavras-alvo. Falha => []. */
 export async function fetchTargets({ tiers = ['bronze', 'silver'], bands, limit = 15 } = {}) {

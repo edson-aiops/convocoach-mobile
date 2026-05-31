@@ -15,7 +15,7 @@ const SHELL = [
 // Hosts que NUNCA devem ser cacheados (APIs externas).
 // Mantenha em sincronia com MASTERY_API_URL em mastery.js.
 // Em producao, adicione o host do HF Space aqui.
-const NO_CACHE_HOSTS = ['api.groq.com', 'localhost:8000'];
+const NO_CACHE_HOSTS = ['api.groq.com', 'edsonpo-vocab-mastery-api.hf.space'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(SHELL)));
@@ -40,7 +40,7 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (e) => {
   const { request } = e;
   const url = new URL(request.url);
-  const hostPort = url.host; // inclui porta, ex: localhost:8000
+  const hostPort = url.host;
   // Bypass: nunca cachear chamadas de API externas (Groq + mastery)
   if (NO_CACHE_HOSTS.includes(url.hostname) || NO_CACHE_HOSTS.includes(hostPort)) {
     e.respondWith(fetch(request));
